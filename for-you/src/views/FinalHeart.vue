@@ -24,37 +24,63 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const bgMusic = ref(null)
 
-const CANVAS_WIDTH = 640
-const CANVAS_HEIGHT = 480
-const CANVAS_CENTER_X = CANVAS_WIDTH / 2
-const CANVAS_CENTER_Y = CANVAS_HEIGHT / 2
-const IMAGE_ENLARGE = 11
+const BASE_WIDTH = 640  // 基础宽度
+const BASE_HEIGHT = 480 // 基础高度
+const CANVAS_WIDTH = ref(BASE_WIDTH)
+const CANVAS_HEIGHT = ref(BASE_HEIGHT)
+const CANVAS_CENTER_X = computed(() => CANVAS_WIDTH.value / 2)
+const CANVAS_CENTER_Y = computed(() => CANVAS_HEIGHT.value / 2)
+const IMAGE_ENLARGE = ref(11)
+const scale = ref(1) // 添加缩放比例
 
-// 您提供的所有函数保持不变
-function heartFunction(t, enlargeRatio = IMAGE_ENLARGE) {
+// 修改调整函数
+function adjustCanvasSize() {
+  const width = window.innerWidth
+  const height = window.innerHeight
+  
+  if (width < 768) {
+    // 计算合适的缩放比例
+    const widthScale = (width * 0.9) / BASE_WIDTH
+    const heightScale = (height * 0.6) / BASE_HEIGHT
+    scale.value = Math.min(widthScale, heightScale)
+    
+    // 保持原始比例，只是缩放
+    CANVAS_WIDTH.value = BASE_WIDTH
+    CANVAS_HEIGHT.value = BASE_HEIGHT
+    IMAGE_ENLARGE.value = 11 * scale.value
+  } else {
+    scale.value = 1
+    CANVAS_WIDTH.value = BASE_WIDTH
+    CANVAS_HEIGHT.value = BASE_HEIGHT
+    IMAGE_ENLARGE.value = 11
+  }
+}
+
+// 修改heartFunction使用响应式值
+function heartFunction(t, enlargeRatio = IMAGE_ENLARGE.value) {
     let x = 16 * Math.pow(Math.sin(t), 3)
     let y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))
     x *= enlargeRatio
     y *= enlargeRatio
-    return [x + CANVAS_CENTER_X, y + CANVAS_CENTER_Y]
+    return [x + CANVAS_CENTER_X.value, y + CANVAS_CENTER_Y.value]
 }
 
 function calculatePosition(x, y, ratio) {
     const distanceFromCenter = Math.sqrt(
-        Math.pow(x - CANVAS_CENTER_X, 2) + 
-        Math.pow(y - CANVAS_CENTER_Y, 2)
+        Math.pow(x - CANVAS_CENTER_X.value, 2) + 
+        Math.pow(y - CANVAS_CENTER_Y.value, 2)
     )
     const btRange = 1000 / (distanceFromCenter + 1)
-    const dx = ratio * btRange * (x - CANVAS_CENTER_X) / 1000
-    const dy = ratio * btRange * (y - CANVAS_CENTER_Y) / 1000
+    const dx = ratio * btRange * (x - CANVAS_CENTER_X.value) / 1000
+    const dy = ratio * btRange * (y - CANVAS_CENTER_Y.value) / 1000
     return [x - dx, y - dy]
 }
 
 function scatterInside(x, y, beta = 0.15) {
     const ratiox = -beta * Math.log(Math.random())
     const ratioy = -beta * Math.log(Math.random())
-    const dx = ratiox * (x - CANVAS_CENTER_X)
-    const dy = ratioy * (y - CANVAS_CENTER_Y)
+    const dx = ratiox * (x - CANVAS_CENTER_X.value)
+    const dy = ratioy * (y - CANVAS_CENTER_Y.value)
     return [x - dx, y - dy]
 }
 
@@ -64,8 +90,8 @@ const animationFrame = ref(null)
 
 const visibleParticles = computed(() => {
     return particles.value.filter(p => 
-        p.x >= -10 && p.x <= CANVAS_WIDTH + 10 && 
-        p.y >= -10 && p.y <= CANVAS_HEIGHT + 10
+        p.x >= -10 && p.x <= CANVAS_WIDTH.value + 10 && 
+        p.y >= -10 && p.y <= CANVAS_HEIGHT.value + 10
     )
 })
 
@@ -146,11 +172,11 @@ function updateParticles() {
 }
 
 function getParticleStyle(particle) {
-    return {
-        transform: `translate3d(${particle.x}px, ${particle.y}px, 0)`,
-        width: `${particle.size}px`,
-        height: `${particle.size}px`
-    }
+  return {
+    transform: `translate3d(${particle.x}px, ${particle.y}px, 0) scale(${scale.value})`,
+    width: `${particle.size}px`,
+    height: `${particle.size}px`
+  }
 }
 
 function playMusic() {
@@ -206,6 +232,12 @@ function getFallingParticleStyle(particle) {
 }
 
 onMounted(() => {
+    // 初始调整画布大小
+    adjustCanvasSize()
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', adjustCanvasSize)
+    
     particles.value = createBaseParticles()
     updateParticles()
     
@@ -234,6 +266,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+    window.removeEventListener('resize', adjustCanvasSize)
     if (animationFrame.value) {
         cancelAnimationFrame(animationFrame.value)
     }
@@ -270,10 +303,24 @@ onBeforeUnmount(() => {
 }
 
 .canvas-container {
-  width: 640px;
-  height: 480px;
+  width: 640px;  /* 恢复固定宽度 */
+  height: 480px; /* 恢复固定高度 */
   position: relative;
   z-index: 2;
+  transform-origin: center center;
+}
+
+@media screen and (max-width: 768px) {
+  .canvas-container {
+    transform: scale(var(--canvas-scale, 1));
+  }
+  
+  .heart-container {
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
 }
 
 .particle {
